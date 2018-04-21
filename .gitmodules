@@ -1,0 +1,9 @@
+[submodule "include/mfl"]
+	path = include/mfl
+	url = https://github.com/m-lima/mfl
+[submodule "lib/fmt"]
+	path = lib/fmt
+	url = https://github.com/fmtlib/fmt
+[submodule "include/linenoise"]
+	path = include/linenoise
+	url = https://github.com/yhirose/cpp-linenoise
