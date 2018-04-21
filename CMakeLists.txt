@@ -80,6 +80,7 @@ list(APPEND SOURCES
  list(APPEND HEADERS
      ${CPP_SRC_DIR}/debugger.hpp
      ${CPP_SRC_DIR}/breakpoint.hpp
+     ${CPP_SRC_DIR}/registers.hpp
      )
 
 list(APPEND SOURCES ${HEADERS})
@@ -90,7 +91,7 @@ list(APPEND SOURCES ${HEADERS})
 
 # Create project
 add_executable(${EXECUTABLE_NAME} ${SOURCES} ${CPP_SRC_DIR}/main.cpp)
-set_target_properties(${EXECUTABLE_NAME} PROPERTIES CXX_LANGUAGE_STANDARD 14 C_STANDARD 11)
+set_target_properties(${EXECUTABLE_NAME} PROPERTIES CXX_LANGUAGE_STANDARD 17 C_STANDARD 11)
 
 # Organize the source
 source_group("Headers" FILES ${HEADERS})

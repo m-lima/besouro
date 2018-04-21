@@ -11,6 +11,7 @@ private:
   std::uint8_t mSavedData;
 
 public:
+  Breakpoint() = default;
   Breakpoint(pid_t pid, std::intptr_t address) : mPid{pid}, mAddress{address}, mEnabled{false}, mSavedData{} {}
 
   void enable();

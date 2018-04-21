@@ -2,19 +2,22 @@
 
 #include <wait.h>
 #include <sys/ptrace.h>
+#include <iterator>
 
 #include <linenoise/linenoise.hpp>
 #include <mfl/string.hpp>
 #include <mfl/out.hpp>
+#include <sys/user.h>
 
 namespace {
   struct Command {
     const char * command;
     const char * shortcut;
     const unsigned int expectedArgumentCount;
-    void (*executeCommand)(Debugger * instance, const std::vector<std::string> & cmd);
+    void (* executeCommand)(Debugger * instance, const std::vector<std::string> & cmd);
 
     auto matches(const std::string & str) const -> bool { return str == command || str == shortcut; }
+
     friend auto operator==(const Command & c1, const Command & c2) -> bool { return c1.command == c2.command; }
 
     void execute(Debugger * instance, const std::vector<std::string> & cmd) const {
@@ -26,26 +29,34 @@ namespace {
     }
   };
 
-  constexpr std::array<Command, 3> COMMANDS = {
-      Command{"quit", "q", 0, [](Debugger *, const std::vector<std::string> &) -> void { std::exit(0); }},
+  constexpr std::array<Command, 3> COMMANDS{
+      {
+          {"quit", "q", 0, [](Debugger *, const std::vector<std::string> &) -> void { std::exit(0); }},
 
-      Command{"continue", "c", 0, [](Debugger * instance, const std::vector<std::string> &) -> void {
-        instance->continueExecution();
-      }},
+          {"continue", "c", 0, [](Debugger * instance, const std::vector<std::string> &) -> void {
+            instance->continueExecution();
+          }},
 
-      Command{"breakpoint", "b", 1, [](Debugger * instance, const std::vector<std::string> & cmd) -> void {
-        instance->setBreakpoint(std::stol(cmd[1]));
-      }}
+          {"breakpoint", "b", 1, [](Debugger * instance, const std::vector<std::string> & cmd) -> void {
+            instance->setBreakpoint(std::stol(cmd[1]));
+          }}
+      }
   };
 }
 
+void Debugger::launch(char * prog) {
+  if (ptrace(PTRACE_TRACEME, 0, nullptr, nullptr) < 0) {
+    mfl::out::println(stderr, "Error with PTRACE");
+  } else {
+    execl(prog, nullptr);
+  }
+}
+
 void Debugger::run() {
-  int waitStatus = 0;
-  int options = 0;
-  waitpid(mPid, &waitStatus, options);
+  waitForSignal();
 
   std::string line;
-  while(!linenoise::Readline("besouro> ", line)) {
+  while (!linenoise::Readline("besouro> ", line)) {
     if (line.empty()) {
       continue;
     }
@@ -69,16 +80,9 @@ void Debugger::handleCommand(const std::string & line) {
 }
 
 void Debugger::continueExecution() {
+  stepOverBreakpoint();
   ptrace(PTRACE_CONT, mPid, nullptr, nullptr);
-
-  int waitStatus;
-  int options = 0;
-  waitpid(mPid, &waitStatus, options);
-}
-
-void Debugger::launch(char * prog) {
-  ptrace(PTRACE_TRACEME, 0, nullptr, nullptr);
-  execl(prog, nullptr);
+  waitForSignal();
 }
 
 void Debugger::setBreakpoint(std::intptr_t address) {
@@ -86,5 +90,51 @@ void Debugger::setBreakpoint(std::intptr_t address) {
 
   Breakpoint breakpoint{mPid, address};
   breakpoint.enable();
-  mBreakpoints.insert(std::make_pair<std::intptr_t, Breakpoint>(std::move(address), std::move(breakpoint)));
+  mBreakpoints[address] = breakpoint;
+}
+
+std::uint64_t Debugger::getRegister(Register::Register reg) {
+  return 0;
+//  user_regs_struct registers;
+//  ptrace(PTRACE_GETREGS, mPid, nullptr, &registers);
+//
+//  auto it = std::find(std::begin(Register::DESCRIPTORS),
+//                      std::end(Register::DESCRIPTORS),
+//                      [&reg](auto && descriptor) { return descriptor.reg == reg; });
+//
+//  return *(reinterpret_cast<std::uint64_t *>(&registers) + (it - std::begin(Register::DESCRIPTORS)));
+}
+
+void Debugger::setRegister(Register::Register reg, std::uint64_t value) {
+//  user_regs_struct registers;
+//  ptrace(PTRACE_GETREGS, mPid, nullptr, &registers);
+//
+//  auto it = std::find(std::begin(Register::DESCRIPTORS),
+//                      std::end(Register::DESCRIPTORS),
+//                      [reg](auto && rd) { return rd.reg == reg; });
+//
+//  *(reinterpret_cast<std::uint64_t *>(&registers) + (it - std::begin(Register::DESCRIPTORS))) = value;
+}
+
+void Debugger::waitForSignal() {
+  int status;
+  waitpid(mPid, &status, 0);
+}
+
+void Debugger::stepOverBreakpoint() {
+  auto possibleBreakpointLocation = getPC() - 1;
+
+  if (mBreakpoints.count(possibleBreakpointLocation)) {
+    auto & breakpoint = mBreakpoints[possibleBreakpointLocation];
+
+    if (breakpoint.isEnabled()) {
+      auto previousInstructionAddress = possibleBreakpointLocation;
+      setPC(previousInstructionAddress);
+
+      breakpoint.disable();
+      ptrace(PTRACE_SINGLESTEP, mPid, nullptr, nullptr);
+      waitForSignal();
+      breakpoint.enable();
+    }
+  }
 }
