@@ -28,8 +28,10 @@ namespace {
       }
     }
   };
+}
 
-  constexpr std::array<Command, 3> COMMANDS{
+struct Debugger::Commands {
+  constexpr static std::array<Command, 3> AVAILABLE {
       {
           {"quit", "q", 0, [](Debugger *, const std::vector<std::string> &) -> void { std::exit(0); }},
 
@@ -42,7 +44,7 @@ namespace {
           }}
       }
   };
-}
+};
 
 void Debugger::launch(char * prog) {
   if (ptrace(PTRACE_TRACEME, 0, nullptr, nullptr) < 0) {
@@ -69,7 +71,7 @@ void Debugger::run() {
 void Debugger::handleCommand(const std::string & line) {
   auto commandLine = mfl::string::split(line, ' ');
 
-  for (const auto & command : COMMANDS) {
+  for (const auto & command : Commands::AVAILABLE) {
     if (command.matches(commandLine[0])) {
       command.execute(this, commandLine);
       return;
@@ -94,26 +96,25 @@ void Debugger::setBreakpoint(std::intptr_t address) {
 }
 
 std::uint64_t Debugger::getRegister(Register::Register reg) {
-  return 0;
-//  user_regs_struct registers;
-//  ptrace(PTRACE_GETREGS, mPid, nullptr, &registers);
-//
-//  auto it = std::find(std::begin(Register::DESCRIPTORS),
-//                      std::end(Register::DESCRIPTORS),
-//                      [&reg](auto && descriptor) { return descriptor.reg == reg; });
-//
-//  return *(reinterpret_cast<std::uint64_t *>(&registers) + (it - std::begin(Register::DESCRIPTORS)));
+  user_regs_struct registers;
+  ptrace(PTRACE_GETREGS, mPid, nullptr, &registers);
+
+  auto it = std::find_if(cbegin(Register::DESCRIPTORS),
+                         cend(Register::DESCRIPTORS),
+                         [reg](auto && descriptor) { return descriptor.reg == reg; });
+
+  return *(reinterpret_cast<std::uint64_t*>(&registers) + (it - std::begin(Register::DESCRIPTORS)));
 }
 
 void Debugger::setRegister(Register::Register reg, std::uint64_t value) {
-//  user_regs_struct registers;
-//  ptrace(PTRACE_GETREGS, mPid, nullptr, &registers);
-//
-//  auto it = std::find(std::begin(Register::DESCRIPTORS),
-//                      std::end(Register::DESCRIPTORS),
-//                      [reg](auto && rd) { return rd.reg == reg; });
-//
-//  *(reinterpret_cast<std::uint64_t *>(&registers) + (it - std::begin(Register::DESCRIPTORS))) = value;
+  user_regs_struct registers;
+  ptrace(PTRACE_GETREGS, mPid, nullptr, &registers);
+
+  auto it = std::find_if(cbegin(Register::DESCRIPTORS),
+                         cend(Register::DESCRIPTORS),
+                         [reg](auto && descriptor) { return descriptor.reg == reg; });
+
+  *(reinterpret_cast<std::uint64_t*>(&registers) + (it - std::begin(Register::DESCRIPTORS))) = value;
 }
 
 void Debugger::waitForSignal() {
@@ -137,4 +138,50 @@ void Debugger::stepOverBreakpoint() {
       breakpoint.enable();
     }
   }
+}
+
+std::optional<dwarf::die> Debugger::getFunctionFromPC(std::uint64_t pc) {
+  for (const auto & cu : mDwarf.compilation_units()) {
+    if (dwarf::die_pc_range(cu.root()).contains(pc)) {
+      for (const auto & die : cu.root()) {
+        if (die.tag == dwarf::DW_TAG::subprogram) {
+          if (dwarf::die_pc_range(die).contains(pc)) {
+            return std::make_optional(die);
+          }
+        }
+      }
+    }
+  }
+
+  mfl::out::println(stderr, "Could not find function at 0x{:x}", pc);
+  return {};
+}
+
+std::optional<dwarf::line_table::iterator> Debugger::getLineFromPC(std::uint64_t pc) {
+  for (const auto & cu : mDwarf.compilation_units()) {
+    if (dwarf::die_pc_range(cu.root()).contains(pc)) {
+      auto & lineTable = cu.get_line_table();
+      auto it = lineTable.find_address(pc);
+      if (it == lineTable.end()) {
+        mfl::out::println(stderr, "Could not find line at 0x{:x}", pc);
+        return {};
+      } else {
+        return std::make_optional(it);
+      }
+    }
+  }
+
+  mfl::out::println(stderr, "Could not find line at 0x{:x}", pc);
+  return {};
+}
+
+void Debugger::printSource(const std::string & fileName, unsigned int line, unsigned int lineContext) {
+  std::ifstream file{fileName};
+
+  auto startLine = line <= lineContext ? 1 : line - lineContext;
+  auto endLine = line + lineContext + (line < lineContext ? lineContext - line : 0);
+
+  char c{};
+
+  auto currentLine = 1u;
 }

@@ -53,11 +53,11 @@ STRING(REGEX REPLACE "\\\\" "/" ENV_HOME_DIR "$ENV{HOME}")
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/findcmake")
 
 # Set base directories
-set(CPP_SRC_DIR "src")
-set(LIB_DIR "lib")
+set(CPP_SRC_DIR "${PROJECT_SOURCE_DIR}/src")
+set(LIB_DIR "${PROJECT_SOURCE_DIR}/lib")
 
 # Add manual libs
-list(APPEND INCLUDE_DIRS "include")
+list(APPEND INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/include")
 
 ##------------------------------------------------------------------------------
 ## Dependencies
@@ -66,6 +66,20 @@ list(APPEND INCLUDE_DIRS "include")
 add_subdirectory("${LIB_DIR}/fmt")
 list(APPEND INCLUDE_DIRS "${LIB_DIR}/fmt")
 list(APPEND LIBRARIES fmt::fmt-header-only)
+
+add_custom_target(
+   libelfin
+   COMMAND make
+   WORKING_DIRECTORY "${LIB_DIR}/libelfin"
+)
+list(APPEND INCLUDE_DIRS "${LIB_DIR}/libelfin")
+list(APPEND LIBRARIES
+  "${LIB_DIR}/libelfin/elf/libelf++.so"
+  "${LIB_DIR}/libelfin/dwarf/libdwarf++.so"
+)
+# add_executable(myexecutable myexcutable.c)
+# target_link_libraries(myexecutable full_path_to_generated_library)
+# add_dependencies(myexecutable extern_lib)
 
 ##------------------------------------------------------------------------------
 ## Sources
@@ -102,3 +116,5 @@ target_link_libraries(${EXECUTABLE_NAME} PRIVATE ${LIBRARIES})
 # Add manual includes
 target_include_directories(${EXECUTABLE_NAME} PRIVATE ${INCLUDE_DIRS})
 
+# We depend on elfin running
+add_dependencies(${EXECUTABLE_NAME} libelfin)

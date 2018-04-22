@@ -7,3 +7,6 @@
 [submodule "include/linenoise"]
 	path = include/linenoise
 	url = https://github.com/yhirose/cpp-linenoise
+[submodule "lib/libelfin"]
+	path = lib/libelfin
+	url = https://github.com/TartanLlama/libelfin
